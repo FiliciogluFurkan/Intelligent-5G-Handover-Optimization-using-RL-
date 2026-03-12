@@ -1,0 +1,5 @@
+gymnasium==0.28.1
+stable-baselines3==1.8.0
+numpy==1.21.6
+matplotlib==3.5.3
+flask==2.2.5
