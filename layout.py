@@ -6,192 +6,183 @@ from environment import HandoverEnv
 from figures import build_network_figure, build_chart
 
 
-def create_layout(env: HandoverEnv) -> dbc.Container:
-    """Ana layout'u oluştur ve döndür."""
-
-    # Başlangıç figürleri
+def create_layout(env: HandoverEnv) -> html.Div:
     empty_net   = build_network_figure(env, 0)
-    empty_chart = build_chart([], "", "blue")
 
-    return dbc.Container(fluid=True, children=[
+    return html.Div([
 
-        # ── State & Timer ─────────────────────────────────────────────────
-        dcc.Store(id="sim-state", data={
-            "running":   False,
-            "step":      0,
-            "algorithm": "baseline",
-            "history":   {"handovers": [], "sinr": [], "energy": []},
-        }),
-        dcc.Interval(id="interval", interval=500, n_intervals=0, disabled=True),
+        # ── Top App Bar ────────────────────────────────────────────────────
+        html.Div([
+            html.Div(className="topbar-dot"),
+            html.H1("5G Handover Optimization", className="topbar-title"),
+            html.Span("Live Simulation", className="topbar-badge"),
+        ], className="topbar"),
 
-        # ── Header ────────────────────────────────────────────────────────
-        dbc.Row(
-            dbc.Col(html.H3(
-                "5G Handover Optimization Dashboard",
-                className="header-title",
-            )),
-            className="mb-3 mt-2",
-        ),
+        # ── Page Content ───────────────────────────────────────────────────
+        html.Div([
 
-        # ── Hata Bildirimi ────────────────────────────────────────────────
-        dbc.Row(dbc.Col(
+            # State & Timer
+            dcc.Store(id="sim-state", data={
+                "running": False, "step": 0, "algorithm": "baseline",
+                "history": {"handovers": [], "sinr": [], "energy": []},
+            }),
+            dcc.Interval(id="interval", interval=500, n_intervals=0, disabled=True),
+
+            # Error alert
             dbc.Alert(id="error-alert", is_open=False,
-                      color="danger", dismissable=True, className="mb-2"),
-        )),
+                      color="danger", dismissable=True,
+                      className="mb-3"),
 
-        # ── Kontrol Çubuğu ────────────────────────────────────────────────
-        dbc.Row([
-            dbc.Col([
-                html.Label("Algorithm", className="control-label"),
-                dcc.Dropdown(
-                    id="algo-dropdown",
-                    options=[
-                        {"label": "Baseline (Greedy SINR)", "value": "baseline"},
-                        {"label": "DQN — Deep Q-Network",  "value": "dqn"},
-                        {"label": "PPO — Proximal Policy",  "value": "ppo"},
-                    ],
-                    value="baseline",
-                    clearable=False,
-                    className="algo-dropdown",
-                ),
-            ], width=3),
+            # ── Toolbar ────────────────────────────────────────────────────
+            html.Div([
 
-            dbc.Col([
-                html.Label("Simulation Speed", className="control-label"),
-                dcc.Slider(
-                    id="speed-slider", min=1, max=10, step=1, value=3,
-                    marks={i: str(i) for i in range(1, 11)},
-                    tooltip={"always_visible": False},
-                ),
-            ], width=4),
-
-            dbc.Col([
-                dbc.Button("▶ Start", id="btn-start",
-                           color="success", className="control-btn me-2"),
-                dbc.Button("⏸ Stop", id="btn-stop",
-                           color="warning", className="control-btn me-2"),
-                dbc.Button(" Reset", id="btn-reset",
-                           color="secondary", className="control-btn"),
-            ], width=5, className="d-flex align-items-end pb-1"),
-        ], className="control-bar mb-3 align-items-end"),
-
-        # ── Harita + Metrikler ────────────────────────────────────────────
-        dbc.Row([
-
-            # Canlı ağ haritası
-            dbc.Col(
-                dbc.Card([
-                    dbc.CardHeader("📡 Live Network Map",
-                                   className="card-header-custom"),
-                    dbc.CardBody(
-                        dcc.Graph(id="network-map", figure=empty_net,
-                                  config={"displayModeBar": False}),
-                        className="p-1",
+                html.Div([
+                    html.Span("Algorithm", className="input-label"),
+                    dcc.Dropdown(
+                        id="algo-dropdown",
+                        options=[
+                            {"label": "Baseline — Greedy SINR", "value": "baseline"},
+                            {"label": "DQN — Deep Q-Network",   "value": "dqn"},
+                            {"label": "PPO — Proximal Policy",  "value": "ppo"},
+                        ],
+                        value="baseline",
+                        clearable=False,
                     ),
-                ], className="dashboard-card"),
-                width=8,
-            ),
+                ], className="toolbar-group wide"),
 
-            # Metrik paneli
-            dbc.Col([
+                html.Div(className="toolbar-divider"),
 
-                # 4 metrik kartı
-                dbc.Row([
-                    dbc.Col(_metric_card("Total Handovers", "metric-handovers",
-                                         "0", "metric-blue"),  width=6),
-                    dbc.Col(_metric_card("Avg SINR (dB)",   "metric-sinr",
-                                         "0.0", "metric-green"), width=6),
-                ], className="mb-2"),
+                html.Div([
+                    html.Span("Simulation Speed", className="input-label"),
+                    dcc.Slider(
+                        id="speed-slider", min=1, max=10, step=1, value=3,
+                        marks={i: str(i) for i in range(1, 11)},
+                        tooltip={"always_visible": False},
+                    ),
+                ], className="toolbar-group wider"),
 
-                dbc.Row([
-                    dbc.Col(_metric_card("Ping-Pong",       "metric-pingpong",
-                                         "0", "metric-orange"), width=6),
-                    dbc.Col(_metric_card("Emergency Disc.", "metric-emergency",
-                                         "0", "metric-red"),    width=6),
-                ], className="mb-2"),
+                html.Div(className="toolbar-divider"),
 
-                # BS yük barları
-                dbc.Card([
-                    dbc.CardHeader("📶 Baz İstasyonu Yükü",
-                                   className="card-header-custom"),
-                    dbc.CardBody(id="bs-load-bars"),
-                ], className="dashboard-card mb-2"),
+                html.Div([
+                    html.Button("▶  Start",  id="btn-start",
+                                className="btn-primary-custom"),
+                    html.Button("⏸  Stop",   id="btn-stop",
+                                className="btn-outline-custom"),
+                    html.Button("↺  Reset",  id="btn-reset",
+                                className="btn-outline-custom"),
+                ], className="btn-group"),
 
-                # Kullanıcı tipi açıklaması
-                dbc.Card(
-                    dbc.CardBody([
-                        html.Small("User Types",
-                                   className="fw-bold d-block mb-2 text-muted"),
-                        html.Span("● Pedestrian (5 km/h)   ",
-                                  style={"color": "orange", "fontSize": "12px"}),
-                        html.Br(),
-                        html.Span("■ Vehicle (60 km/h)   ",
-                                  style={"color": "purple", "fontSize": "12px"}),
-                        html.Br(),
-                        html.Span("▲ Emergency (120 km/h)",
-                                  style={"color": "crimson", "fontSize": "12px"}),
-                    ]),
-                    className="dashboard-card",
+            ], className="toolbar mb-4"),
+
+            # ── Main content ───────────────────────────────────────────────
+            dbc.Row([
+
+                # Network map
+                dbc.Col(
+                    html.Div([
+                        html.Div([
+                            html.Span("📡", style={"fontSize": "14px"}),
+                            html.P("Live Network Map", className="card-header-label"),
+                        ], className="card-header-flat"),
+                        html.Div(
+                            dcc.Graph(id="network-map", figure=empty_net,
+                                      config={"displayModeBar": False},
+                                      style={"height": "520px"}),
+                            className="card-body-p0",
+                        ),
+                    ], className="card-flat"),
+                    width=8,
                 ),
 
-            ], width=4),
+                # Right panel
+                dbc.Col([
 
-        ], className="mb-3"),
+                    # Metrics grid
+                    html.Div([
+                        _metric_cell("Total Handovers", "metric-handovers",
+                                     "0",   "c-indigo"),
+                        _metric_cell("Avg SINR (dB)",   "metric-sinr",
+                                     "0.0", "c-emerald"),
+                        _metric_cell("Ping-Pong",        "metric-pingpong",
+                                     "0",   "c-amber"),
+                        _metric_cell("Emergency Disc.",  "metric-emergency",
+                                     "0",   "c-rose"),
+                    ], className="card-flat metrics-grid mb-3"),
 
-        # ── Zaman Serisi Grafikleri ───────────────────────────────────────
-        dbc.Row([
-            dbc.Col(
-                dbc.Card([
-                    dbc.CardHeader("📈 Handover Sayısı",
-                                   className="card-header-custom"),
-                    dbc.CardBody(
-                        dcc.Graph(id="chart-handovers",
-                                  figure=build_chart([], "Handovers Over Time", "blue"),
-                                  config={"displayModeBar": False}),
-                        className="p-1",
-                    ),
-                ], className="dashboard-card"),
-                width=4,
-            ),
-            dbc.Col(
-                dbc.Card([
-                    dbc.CardHeader("📊 Average SINR (dB)",
-                                   className="card-header-custom"),
-                    dbc.CardBody(
-                        dcc.Graph(id="chart-sinr",
-                                  figure=build_chart([], "Avg SINR (dB) Over Time", "green"),
-                                  config={"displayModeBar": False}),
-                        className="p-1",
-                    ),
-                ], className="dashboard-card"),
-                width=4,
-            ),
-            dbc.Col(
-                dbc.Card([
-                    dbc.CardHeader("⚡ Energy Consumption",
-                                   className="card-header-custom"),
-                    dbc.CardBody(
-                        dcc.Graph(id="chart-energy",
-                                  figure=build_chart([], "Energy Over Time", "red"),
-                                  config={"displayModeBar": False}),
-                        className="p-1",
-                    ),
-                ], className="dashboard-card"),
-                width=4,
-            ),
-        ]),
+                    # BS Load
+                    html.Div([
+                        html.Div([
+                            html.Span("📶", style={"fontSize": "14px"}),
+                            html.P("Base Station Load",
+                                   className="card-header-label"),
+                        ], className="card-header-flat"),
+                        html.Div(id="bs-load-bars", className="bs-row"),
+                    ], className="card-flat mb-3"),
 
-    ], style={"maxWidth": "1400px", "margin": "0 auto"})
+                    # Legend
+                    html.Div([
+                        html.Div([
+                            html.Span("◎", style={"fontSize": "14px",
+                                                   "color": "#94A3B8"}),
+                            html.P("User Types", className="card-header-label"),
+                        ], className="card-header-flat"),
+                        html.Div([
+                            html.Div([
+                                html.Div(className="legend-dot",
+                                         style={"background": "#F97316"}),
+                                html.Span("Pedestrian  5 km/h"),
+                            ], className="legend-item"),
+                            html.Div([
+                                html.Div(className="legend-dot",
+                                         style={"background": "#A855F7"}),
+                                html.Span("Vehicle  60 km/h"),
+                            ], className="legend-item"),
+                            html.Div([
+                                html.Div(className="legend-dot",
+                                         style={"background": "#E11D48"}),
+                                html.Span("Emergency  120 km/h"),
+                            ], className="legend-item"),
+                        ], className="legend-row"),
+                    ], className="card-flat"),
+
+                ], width=4),
+            ], className="mb-4 g-3"),
+
+            # ── Time-series charts ─────────────────────────────────────────
+            dbc.Row([
+                dbc.Col(_chart_card("chart-handovers",
+                                    "Handovers", "📈"), width=4),
+                dbc.Col(_chart_card("chart-sinr",
+                                    "Avg SINR (dB)", "📊"), width=4),
+                dbc.Col(_chart_card("chart-energy",
+                                    "Energy Consumption",""), width=4),
+            ], className="g-3"),
+
+        ], className="page-wrapper"),
+    ])
 
 
-# ── Yardımcı ──────────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────
 
-def _metric_card(label: str, element_id: str,
-                 init_value: str, color_class: str) -> dbc.Card:
-    return dbc.Card(
-        dbc.CardBody([
-            html.P(label, className="metric-label"),
-            html.H3(init_value, id=element_id, className=f"metric-value {color_class}"),
-        ]),
-        className="dashboard-card metric-card",
-    )
+def _metric_cell(label, element_id, init, color_cls):
+    return html.Div([
+        html.P(label, className="metric-label"),
+        html.P(init,  id=element_id,
+               className=f"metric-value {color_cls}"),
+    ], className="metrics-cell")
+
+
+def _chart_card(graph_id, title, icon):
+    return html.Div([
+        html.Div([
+            html.Span(icon, style={"fontSize": "14px"}),
+            html.P(title, className="card-header-label"),
+        ], className="card-header-flat"),
+        html.Div(
+            dcc.Graph(id=graph_id,
+                      figure=build_chart([], title, "#4F46E5"),
+                      config={"displayModeBar": False},
+                      style={"height": "200px"}),
+            className="card-body-p0",
+        ),
+    ], className="card-flat")

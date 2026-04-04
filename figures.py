@@ -2,34 +2,43 @@
 import numpy as np
 import plotly.graph_objects as go
 from dash import html
-import dash_bootstrap_components as dbc
 
 from environment import HandoverEnv
 
-BS_COLORS = ["red", "blue", "green"]
-BS_COLORS_RGB = {
-    "red":   "220,53,69",
-    "blue":  "13,110,253",
-    "green": "25,135,84",
+# Design tokens — eşleşmesi için CSS ile aynı değerler
+BS_COLORS   = ["#6366F1", "#3B82F6", "#10B981"]   # indigo / blue / emerald
+USER_COLORS = {
+    "pedestrian": "#F97316",   # orange-500
+    "vehicle":    "#A855F7",   # purple-500
+    "emergency":  "#E11D48",   # rose-600
 }
+USER_SYMBOLS = {
+    "pedestrian": "circle",
+    "vehicle":    "square",
+    "emergency":  "triangle-up",
+}
+
+FONT_FAMILY = "Inter, system-ui, -apple-system, sans-serif"
+GRID_COLOR  = "#F1F5F9"   # slate-100 — çok soluk
+AXIS_COLOR  = "#94A3B8"   # slate-400
 
 
 def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
-    """Canlı ağ haritası — BS'ler, kullanıcılar, bağlantı çizgileri."""
     fig = go.Figure()
 
-    # Coverage circles
+    # ── Coverage circles ───────────────────────────────────────────────────
     for bs in env.base_stations:
-        theta = np.linspace(0, 2 * np.pi, 60)
+        theta = np.linspace(0, 2 * np.pi, 80)
         cx = bs.position[0] + 150 * np.cos(theta)
         cy = bs.position[1] + 150 * np.sin(theta)
         fig.add_trace(go.Scatter(
             x=cx, y=cy, mode="lines",
-            line=dict(color=BS_COLORS[bs.bs_id], width=1, dash="dot"),
+            line=dict(color=BS_COLORS[bs.bs_id], width=1.5, dash="dot"),
+            opacity=0.35,
             showlegend=False, hoverinfo="skip",
         ))
 
-    # User → BS connection lines
+    # ── User → BS connection lines ─────────────────────────────────────────
     for user in env.users:
         if user.connected_bs is not None:
             bs = env.base_stations[user.connected_bs]
@@ -37,91 +46,152 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
                 x=[user.position[0], bs.position[0]],
                 y=[user.position[1], bs.position[1]],
                 mode="lines",
-                line=dict(color=BS_COLORS[user.connected_bs], width=0.5),
+                line=dict(color=BS_COLORS[user.connected_bs], width=0.75),
+                opacity=0.4,
                 showlegend=False, hoverinfo="skip",
             ))
 
-    # Base stations
+    # ── Base stations ──────────────────────────────────────────────────────
     for bs in env.base_stations:
         fig.add_trace(go.Scatter(
-            x=[bs.position[0]], y=[bs.position[1]],
+            x=[bs.position[0]],
+            y=[bs.position[1]],
             mode="markers+text",
-            marker=dict(symbol="square", size=22, color=BS_COLORS[bs.bs_id]),
-            text=[f"BS{bs.bs_id + 1}<br>{len(bs.connected_users)} users"],
+            marker=dict(
+                symbol="square",
+                size=18,
+                color=BS_COLORS[bs.bs_id],
+                line=dict(width=2, color="white"),
+            ),
+            text=[f"BS{bs.bs_id + 1}  {len(bs.connected_users)}u"],
             textposition="bottom center",
+            textfont=dict(size=11, color=BS_COLORS[bs.bs_id],
+                          family=FONT_FAMILY),
             name=f"BS{bs.bs_id + 1}",
+            hovertemplate=(
+                f"<b>BS{bs.bs_id + 1}</b><br>"
+                f"Users: {len(bs.connected_users)}<br>"
+                f"Load: {bs.get_load() * 100:.0f}%"
+                "<extra></extra>"
+            ),
         ))
 
-    # Users by type
+    # ── Users ──────────────────────────────────────────────────────────────
     for utype, symbol, color in [
-        ("pedestrian", "circle",      "orange"),
-        ("vehicle",    "square",      "purple"),
-        ("emergency",  "triangle-up", "crimson"),
+        ("pedestrian", "circle",      USER_COLORS["pedestrian"]),
+        ("vehicle",    "square",      USER_COLORS["vehicle"]),
+        ("emergency",  "triangle-up", USER_COLORS["emergency"]),
     ]:
         users = [u for u in env.users if u.user_type == utype]
-        if users:
-            fig.add_trace(go.Scatter(
-                x=[u.position[0] for u in users],
-                y=[u.position[1] for u in users],
-                mode="markers",
-                marker=dict(symbol=symbol, size=10, color=color,
-                            line=dict(width=2, color="white")),
-                name=utype.capitalize(),
-            ))
+        if not users:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[u.position[0] for u in users],
+            y=[u.position[1] for u in users],
+            mode="markers",
+            marker=dict(
+                symbol=symbol, size=9, color=color,
+                line=dict(width=1.5, color="white"),
+            ),
+            name=utype.capitalize(),
+            hovertemplate=(
+                f"<b>{utype.capitalize()}</b><br>"
+                "x: %{x:.0f}  y: %{y:.0f}"
+                "<extra></extra>"
+            ),
+        ))
 
+    # ── Layout ────────────────────────────────────────────────────────────
     fig.update_layout(
-        title=dict(text=f"Network Map — Step {step}", font=dict(size=14)),
-        xaxis=dict(showgrid=True, gridcolor="#e9ecef"),
-        yaxis=dict(range=[0, 600], showgrid=True, gridcolor="#e9ecef",
-                   autorange=False, scaleanchor="x"),
-        plot_bgcolor="#f8f9fa",
-        paper_bgcolor="white",
-        margin=dict(l=20, r=20, t=40, b=60),
-        legend=dict(orientation="h", y=-0.12),
-        height=560,
+        title=dict(
+            text=f"Step {step}",
+            font=dict(size=12, color=AXIS_COLOR, family=FONT_FAMILY),
+            x=0.01, y=0.99, xanchor="left", yanchor="top",
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",   # şeffaf — card içine karışır
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(
+            showgrid=True, gridcolor=GRID_COLOR, gridwidth=1,
+            zeroline=False,
+            tickfont=dict(size=10, color=AXIS_COLOR, family=FONT_FAMILY),
+            showline=False,
+        ),
+        yaxis=dict(
+            range=[0, 600], autorange=False,
+            showgrid=True, gridcolor=GRID_COLOR, gridwidth=1,
+            zeroline=False,
+            tickfont=dict(size=10, color=AXIS_COLOR, family=FONT_FAMILY),
+            showline=False,
+            scaleanchor="x",
+        ),
+        margin=dict(l=8, r=8, t=28, b=28),
+        legend=dict(
+            orientation="h", y=-0.05, x=0,
+            font=dict(size=11, color=AXIS_COLOR, family=FONT_FAMILY),
+            bgcolor="rgba(0,0,0,0)",
+            borderwidth=0,
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor=GRID_COLOR,
+            font=dict(size=12, family=FONT_FAMILY),
+        ),
     )
     return fig
 
 
-def build_chart(values: list, title: str, color: str) -> go.Figure:
-    """Tek renkli alan doldurmalı zaman serisi grafiği."""
-    rgb = BS_COLORS_RGB.get(color, "100,100,100")
+def build_chart(values: list, _title: str = "", color: str = "#4F46E5") -> go.Figure:
+    """Minimal alan doldurmalı zaman serisi."""
+    # Hex → rgba fill
+    r, g, b = tuple(int(color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        y=values, mode="lines",
-        line=dict(color=color, width=2),
+        y=values,
+        mode="lines",
+        line=dict(color=color, width=1.75),
         fill="tozeroy",
-        fillcolor=f"rgba({rgb},0.08)",
+        fillcolor=f"rgba({r},{g},{b},0.06)",
+        hovertemplate="Step %{x}: %{y:.2f}<extra></extra>",
     ))
     fig.update_layout(
-        title=dict(text=title, font=dict(size=13)),
-        height=220,
-        margin=dict(l=30, r=10, t=40, b=30),
-        plot_bgcolor="#f8f9fa",
-        paper_bgcolor="white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=8, r=8, t=8, b=8),
         showlegend=False,
-        xaxis=dict(showgrid=True, gridcolor="#e9ecef", title="Steps"),
-        yaxis=dict(showgrid=True, gridcolor="#e9ecef"),
+        xaxis=dict(
+            showgrid=False, zeroline=False,
+            tickfont=dict(size=9, color=AXIS_COLOR, family=FONT_FAMILY),
+            showline=False,
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor=GRID_COLOR, gridwidth=1,
+            zeroline=False,
+            tickfont=dict(size=9, color=AXIS_COLOR, family=FONT_FAMILY),
+            showline=False,
+        ),
+        hoverlabel=dict(
+            bgcolor="white", bordercolor=GRID_COLOR,
+            font=dict(size=11, family=FONT_FAMILY),
+        ),
     )
     return fig
 
 
 def build_bs_load_bars(env: HandoverEnv) -> list:
-    """BS yük progress barları."""
-    colors = ["danger", "primary", "success"]
+    """BS yük satırları — tamamen custom HTML, CSS ile şekillendiriliyor."""
     bars = []
     for bs in env.base_stations:
-        load_pct = int(bs.get_load() * 100)
+        pct = int(bs.get_load() * 100)
         bars.append(html.Div([
-            html.Small(
-                f"BS{bs.bs_id + 1}  —  {len(bs.connected_users)} users  ({load_pct}%)",
-                className="text-muted",
-            ),
-            dbc.Progress(
-                value=load_pct,
-                color=colors[bs.bs_id],
-                className="mb-2",
-                style={"height": "10px"},
+            html.Div([
+                html.Span(f"BS{bs.bs_id + 1}", className="bs-name"),
+                html.Span(f"{pct}%", className="bs-pct"),
+            ], className="bs-label-row"),
+            html.Div(
+                html.Div(className=f"bs-fill bs-fill-{bs.bs_id}",
+                         style={"width": f"{pct}%"}),
+                className="bs-track",
             ),
         ]))
     return bars
