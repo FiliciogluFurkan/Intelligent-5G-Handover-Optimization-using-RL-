@@ -5,7 +5,9 @@ import numpy as np
 
 def train_agent(algorithm="DQN", total_timesteps=100000):
     """Train RL agent for handover optimization"""
-    
+    import os
+    os.makedirs("models", exist_ok=True)
+
     # Create environment
     env = HandoverEnv(num_users=15)
     

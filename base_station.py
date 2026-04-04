@@ -45,3 +45,4 @@ class BaseStation:
         """Disconnect a user from this base station"""
         if user in self.connected_users:
             self.connected_users.remove(user)
+            user.connected_bs = None
