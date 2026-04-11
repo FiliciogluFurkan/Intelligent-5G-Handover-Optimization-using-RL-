@@ -30,22 +30,25 @@ def register_callbacks(app: dash.Dash) -> None:
         Input("algo-dropdown", "value"),
         State("sim-state",    "data"),
         State("speed-slider", "value"),
+        State("users-slider", "value"),
         prevent_initial_call=True,
     )
-    def handle_controls(start, stop, reset, algorithm, state, speed):
+    def handle_controls(start, stop, reset, algorithm, state, speed, num_users):
         global env
         triggered   = callback_context.triggered_id
         alert_msg   = ""
         alert_open  = False
         interval_ms = max(100, 1000 // (speed or 3))
+        num_users   = int(num_users or 15)
 
         if triggered == "btn-reset":
-            env = HandoverEnv()
+            env = HandoverEnv(num_users=num_users)
             env.reset()
             state = {
                 "running":   False,
                 "step":      0,
                 "algorithm": algorithm,
+                "num_users": num_users,
                 "history":   {"handovers": [], "sinr": [], "energy": []},
             }
             return state, True, interval_ms, alert_msg, alert_open
@@ -85,6 +88,8 @@ def register_callbacks(app: dash.Dash) -> None:
         Output("interval",         "disabled",  allow_duplicate=True),
         Output("error-alert",      "children",  allow_duplicate=True),
         Output("error-alert",      "is_open",   allow_duplicate=True),
+        Output("progress-fill",    "style"),
+        Output("progress-label",   "children"),
         Input("interval", "n_intervals"),
         State("sim-state", "data"),
         prevent_initial_call=True,
@@ -139,7 +144,15 @@ def _energy_per_step(env: HandoverEnv, step: int) -> float:
 
 
 def _pack_outputs(env, state, interval_disabled, alert_msg, alert_open):
-    hist = state["history"]
+    hist      = state["history"]
+    max_steps = env.max_steps
+    cur_step  = env.time_step
+    pct       = min(cur_step / max_steps * 100, 100)
+    progress_style = {
+        "width": f"{pct:.1f}%", "height": "100%",
+        "background": "linear-gradient(90deg,#6366F1,#A855F7)",
+        "borderRadius": "4px", "transition": "width 0.3s ease",
+    }
     return (
         build_network_figure(env, state["step"]),
         str(env.total_handovers),
@@ -154,4 +167,6 @@ def _pack_outputs(env, state, interval_disabled, alert_msg, alert_open):
         interval_disabled,
         alert_msg,
         alert_open,
+        progress_style,
+        f"{cur_step} / {max_steps}",
     )

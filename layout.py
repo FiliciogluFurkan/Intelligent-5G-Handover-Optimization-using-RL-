@@ -24,6 +24,7 @@ def create_layout(env: HandoverEnv) -> html.Div:
             # State & Timer
             dcc.Store(id="sim-state", data={
                 "running": False, "step": 0, "algorithm": "baseline",
+                "num_users": 15,
                 "history": {"handovers": [], "sinr": [], "energy": []},
             }),
             dcc.Interval(id="interval", interval=500, n_intervals=0, disabled=True),
@@ -64,6 +65,17 @@ def create_layout(env: HandoverEnv) -> html.Div:
                 html.Div(className="toolbar-divider"),
 
                 html.Div([
+                    html.Span("Users", className="input-label"),
+                    dcc.Slider(
+                        id="users-slider", min=5, max=30, step=5, value=15,
+                        marks={v: str(v) for v in [5, 10, 15, 20, 25, 30]},
+                        tooltip={"always_visible": False},
+                    ),
+                ], className="toolbar-group wider"),
+
+                html.Div(className="toolbar-divider"),
+
+                html.Div([
                     html.Button("▶  Start",  id="btn-start",
                                 className="btn-primary-custom"),
                     html.Button("⏸  Stop",   id="btn-stop",
@@ -73,6 +85,27 @@ def create_layout(env: HandoverEnv) -> html.Div:
                 ], className="btn-group"),
 
             ], className="toolbar mb-4"),
+
+            # ── Episode Progress Bar ───────────────────────────────────────
+            html.Div([
+                html.Div([
+                    html.Span("Episode Progress", className="input-label",
+                              style={"marginRight": "12px", "whiteSpace": "nowrap"}),
+                    html.Div(
+                        html.Div(id="progress-fill",
+                                 style={"width": "0%", "height": "100%",
+                                        "background": "linear-gradient(90deg,#6366F1,#A855F7)",
+                                        "borderRadius": "4px",
+                                        "transition": "width 0.3s ease"}),
+                        style={"flex": "1", "height": "8px",
+                               "background": "#E2E8F0", "borderRadius": "4px"},
+                    ),
+                    html.Span(id="progress-label", children="0 / 1000",
+                              style={"marginLeft": "12px", "fontSize": "12px",
+                                     "color": "#94A3B8", "whiteSpace": "nowrap"}),
+                ], style={"display": "flex", "alignItems": "center",
+                          "padding": "10px 16px"}),
+            ], className="card-flat mb-4"),
 
             # ── Main content ───────────────────────────────────────────────
             dbc.Row([
