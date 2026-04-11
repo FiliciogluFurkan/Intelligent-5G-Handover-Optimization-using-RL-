@@ -1,71 +1,70 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from stable_baselines3 import DQN, PPO
 from environment import HandoverEnv
 
-def evaluate_agent(model, env, num_episodes=10):
-    """Evaluate trained agent"""
-    total_rewards = []
-    handover_counts = []
-    avg_sinrs = []
-    ping_pong_counts = []
-    emergency_disc_counts = []
+# Fixed seeds for reproducible, fair comparison across all algorithms
+EVAL_SEEDS = [42, 123, 456, 789, 1337, 1111, 2222, 3333, 4444, 5555]
+NUM_EPISODES = 10
 
-    for episode in range(num_episodes):
-        obs, _ = env.reset()
-        episode_reward = 0
+
+def evaluate_agent(model, num_episodes=NUM_EPISODES):
+    """Evaluate a trained RL agent over multiple seeded episodes."""
+    rewards, handover_rates, avg_sinrs, ping_pong_rates, emergency_disc = [], [], [], [], []
+
+    env = HandoverEnv()
+    for ep in range(num_episodes):
+        obs, _ = env.reset(seed=EVAL_SEEDS[ep])
+        episode_reward = 0.0
         sinr_values = []
         done = False
 
         while not done:
-            action, _ = model.predict(obs, deterministic=True)
-            # Fix: capture acting user index BEFORE step() increments it
             acting_user_idx = env.current_user_idx
+            action, _ = model.predict(obs, deterministic=True)
             obs, reward, terminated, truncated, _ = env.step(action)
             episode_reward += reward
 
-            # Track SINR for the user that actually acted
             user = env.users[acting_user_idx]
-            bs = env.base_stations[user.connected_bs] if user.connected_bs is not None else env.base_stations[0]
-            sinr = bs.calculate_sinr(user.position)
-            sinr_values.append(sinr)
+            if user.connected_bs is not None:
+                sinr = env.base_stations[user.connected_bs].calculate_sinr(user.position)
+                sinr_values.append(sinr)
 
             done = terminated or truncated
 
-        total_rewards.append(episode_reward)
-        handover_counts.append(env.total_handovers)
-        avg_sinrs.append(np.mean(sinr_values))
-        ping_pong_counts.append(env.ping_pong_count)
-        emergency_disc_counts.append(env.emergency_disconnections)
+        rewards.append(episode_reward)
+        handover_rates.append(env.total_handovers / max(env.time_step, 1))
+        avg_sinrs.append(float(np.mean(sinr_values)) if sinr_values else 0.0)
+        ping_pong_rates.append(env.ping_pong_count / max(env.total_handovers, 1))
+        emergency_disc.append(env.emergency_disconnections)
 
+    env.close()
     return {
-        "avg_reward": np.mean(total_rewards),
-        "avg_handovers": np.mean(handover_counts),
-        "avg_sinr": np.mean(avg_sinrs),
-        "ping_pongs": np.mean(ping_pong_counts),
-        "emergency_disconnections": np.mean(emergency_disc_counts)
+        "rewards": rewards,
+        "handover_rates": handover_rates,
+        "avg_sinrs": avg_sinrs,
+        "ping_pong_rates": ping_pong_rates,
+        "emergency_disc": emergency_disc,
     }
 
-def baseline_evaluation(env, num_episodes=10):
-    """Evaluate baseline (signal-strength only) strategy"""
-    total_rewards = []
-    handover_counts = []
-    avg_sinrs = []
-    ping_pong_counts = []
-    emergency_disc_counts = []
 
-    for episode in range(num_episodes):
-        obs, _ = env.reset()
-        episode_reward = 0
+def evaluate_baseline(num_episodes=NUM_EPISODES):
+    """Evaluate the greedy SINR baseline over multiple seeded episodes."""
+    rewards, handover_rates, avg_sinrs, ping_pong_rates, emergency_disc = [], [], [], [], []
+
+    env = HandoverEnv()
+    for ep in range(num_episodes):
+        obs, _ = env.reset(seed=EVAL_SEEDS[ep])
+        episode_reward = 0.0
         sinr_values = []
         done = False
 
         while not done:
-            # Fix: capture acting user index BEFORE step() increments it
             acting_user_idx = env.current_user_idx
             user = env.users[acting_user_idx]
             sinrs = [bs.calculate_sinr(user.position) for bs in env.base_stations]
-            action = np.argmax(sinrs)
+            action = int(np.argmax(sinrs))
 
             obs, reward, terminated, truncated, _ = env.step(action)
             episode_reward += reward
@@ -73,72 +72,141 @@ def baseline_evaluation(env, num_episodes=10):
 
             done = terminated or truncated
 
-        total_rewards.append(episode_reward)
-        handover_counts.append(env.total_handovers)
-        avg_sinrs.append(np.mean(sinr_values))
-        ping_pong_counts.append(env.ping_pong_count)
-        emergency_disc_counts.append(env.emergency_disconnections)
+        rewards.append(episode_reward)
+        handover_rates.append(env.total_handovers / max(env.time_step, 1))
+        avg_sinrs.append(float(np.mean(sinr_values)) if sinr_values else 0.0)
+        ping_pong_rates.append(env.ping_pong_count / max(env.total_handovers, 1))
+        emergency_disc.append(env.emergency_disconnections)
 
+    env.close()
     return {
-        "avg_reward": np.mean(total_rewards),
-        "avg_handovers": np.mean(handover_counts),
-        "avg_sinr": np.mean(avg_sinrs),
-        "ping_pongs": np.mean(ping_pong_counts),
-        "emergency_disconnections": np.mean(emergency_disc_counts)
+        "rewards": rewards,
+        "handover_rates": handover_rates,
+        "avg_sinrs": avg_sinrs,
+        "ping_pong_rates": ping_pong_rates,
+        "emergency_disc": emergency_disc,
     }
 
+
+def _mean_std(values):
+    return float(np.mean(values)), float(np.std(values))
+
+
 def compare_methods():
-    """Compare baseline vs RL methods"""
-    # Fix: create a fresh env per method to prevent shared state / energy accumulation
-    print("Evaluating Baseline...")
-    baseline_results = baseline_evaluation(HandoverEnv(num_users=15), num_episodes=5)
+    """Compare baseline vs DQN vs PPO with statistical reporting."""
+    os.makedirs("figures", exist_ok=True)
 
-    print("\nEvaluating DQN Agent...")
+    print("Evaluating Baseline (greedy SINR)...")
+    baseline = evaluate_baseline()
+
+    print("Evaluating DQN Agent...")
     dqn_model = DQN.load("models/dqn_handover")
-    dqn_results = evaluate_agent(dqn_model, HandoverEnv(num_users=15), num_episodes=5)
+    dqn = evaluate_agent(dqn_model)
 
-    print("\nEvaluating PPO Agent...")
+    print("Evaluating PPO Agent...")
     ppo_model = PPO.load("models/ppo_handover")
-    ppo_results = evaluate_agent(ppo_model, HandoverEnv(num_users=15), num_episodes=5)
+    ppo = evaluate_agent(ppo_model)
 
-    # Print comparison
-    print("\n" + "=" * 60)
-    print("PERFORMANCE COMPARISON")
-    print("=" * 60)
+    results = {"Baseline": baseline, "DQN": dqn, "PPO": ppo}
 
-    methods = ["Baseline", "DQN", "PPO"]
-    results = [baseline_results, dqn_results, ppo_results]
+    # Print comparison table with mean ± std
+    print("\n" + "=" * 65)
+    print(f"PERFORMANCE COMPARISON — {NUM_EPISODES} Episodes Each, Fixed Seeds")
+    print("=" * 65)
+    for name, r in results.items():
+        rm,  rs  = _mean_std(r["rewards"])
+        hrm, hrs = _mean_std(r["handover_rates"])
+        sm,  ss  = _mean_std(r["avg_sinrs"])
+        ppm, pps = _mean_std(r["ping_pong_rates"])
+        em,  es  = _mean_std(r["emergency_disc"])
+        print(f"\n{name}:")
+        print(f"  Avg Reward:        {rm:8.1f} ± {rs:.1f}")
+        print(f"  Handover Rate:     {hrm:8.2f} ± {hrs:.2f}  (HOs/time-step)")
+        print(f"  Avg SINR:          {sm:8.2f} ± {ss:.2f}  dB")
+        print(f"  Ping-Pong Rate:    {ppm:8.3f} ± {pps:.3f}  (fraction of HOs)")
+        print(f"  Emergency Disc.:   {em:8.1f} ± {es:.1f}")
 
-    for method, result in zip(methods, results):
-        print(f"\n{method}:")
-        print(f"  Avg Reward: {result['avg_reward']:.2f}")
-        print(f"  Avg Handovers: {result['avg_handovers']:.1f}")
-        print(f"  Avg SINR: {result['avg_sinr']:.2f} dB")
-        print(f"  Ping-Pongs: {result['ping_pongs']:.1f}")
-        print(f"  Emergency Disconnections: {result['emergency_disconnections']:.1f}")
+    plot_comparison(results)
+    plot_training_curves()
 
-    # Visualization
-    plot_comparison(methods, results)
 
-def plot_comparison(methods, results):
-    """Plot comparison graphs"""
+def plot_comparison(results: dict):
+    """Plot 2×2 comparison bar chart with error bars."""
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig.suptitle("Algorithm Comparison — Baseline vs DQN vs PPO",
+                 fontsize=14, fontweight="bold", y=1.01)
 
-    metrics = ['avg_handovers', 'avg_sinr', 'ping_pongs', 'emergency_disconnections']
-    titles = ['Average Handovers', 'Average SINR (dB)', 'Ping-Pong Count', 'Emergency Disconnections']
+    methods = list(results.keys())
+    colors = ["#6B7280", "#3B82F6", "#10B981"]
 
-    for idx, (metric, title) in enumerate(zip(metrics, titles)):
+    metrics = [
+        ("rewards",        "Average Reward",                  "Reward"),
+        ("handover_rates", "Handover Rate (HOs/step)",        "HOs / time-step"),
+        ("avg_sinrs",      "Average SINR (dB)",               "dB"),
+        ("ping_pong_rates","Ping-Pong Rate\n(frac. of HOs)",  "Fraction"),
+    ]
+
+    for idx, (key, title, ylabel) in enumerate(metrics):
         ax = axes[idx // 2, idx % 2]
-        values = [r[metric] for r in results]
-        ax.bar(methods, values, color=['gray', 'blue', 'green'])
-        ax.set_title(title)
-        ax.set_ylabel('Value')
-        ax.grid(axis='y', alpha=0.3)
+        means = [np.mean(results[m][key]) for m in methods]
+        stds  = [np.std(results[m][key])  for m in methods]
+        bars = ax.bar(methods, means, yerr=stds, capsize=6,
+                      color=colors, alpha=0.85, edgecolor="white", linewidth=1.5)
+        ax.set_title(title, fontsize=12, fontweight="bold")
+        ax.set_ylabel(ylabel, fontsize=10)
+        ax.grid(axis="y", alpha=0.3)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        for bar, mean in zip(bars, means):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() * 1.01,
+                    f"{mean:.2f}", ha="center", va="bottom", fontsize=9)
 
     plt.tight_layout()
-    plt.savefig('comparison_results.png', dpi=300)
-    print("\nComparison graph saved to 'comparison_results.png'")
+    out = "figures/comparison_bar_charts.png"
+    plt.savefig(out, dpi=300, bbox_inches="tight")
+    print(f"\nComparison chart saved to '{out}'")
     plt.show()
+
+
+def plot_training_curves():
+    """Plot DQN and PPO training reward curves from Monitor logs."""
+    os.makedirs("figures", exist_ok=True)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Training Curves — Episode Reward Over Time",
+                 fontsize=13, fontweight="bold")
+
+    for ax, algo in zip(axes, ["dqn", "ppo"]):
+        log_file = f"models/{algo}_monitor.monitor.csv"
+        if not os.path.exists(log_file):
+            ax.text(0.5, 0.5,
+                    f"No training log found\n({log_file})\nRun train.py first.",
+                    ha="center", va="center", transform=ax.transAxes,
+                    color="gray", fontsize=11)
+            ax.set_title(f"{algo.upper()} Training Curve", fontsize=12, fontweight="bold")
+            continue
+
+        import pandas as pd
+        df = pd.read_csv(log_file, skiprows=1)
+        rewards = df["r"].values
+        rolling = pd.Series(rewards).rolling(5, min_periods=1).mean().values
+
+        ax.plot(rewards, alpha=0.3, color="#3B82F6", label="Episode reward")
+        ax.plot(rolling, color="#3B82F6", linewidth=2, label="5-ep rolling mean")
+        ax.set_title(f"{algo.upper()} Training Curve", fontsize=12, fontweight="bold")
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Episode Reward")
+        ax.legend(fontsize=10)
+        ax.grid(alpha=0.3)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    plt.tight_layout()
+    out = "figures/training_curves.png"
+    plt.savefig(out, dpi=300, bbox_inches="tight")
+    print(f"Training curves saved to '{out}'")
+    plt.show()
+
 
 if __name__ == "__main__":
     compare_methods()

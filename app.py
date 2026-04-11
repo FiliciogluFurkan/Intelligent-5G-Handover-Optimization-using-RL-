@@ -1,4 +1,4 @@
-"""Uygulama giriş noktası — sadece başlatma ve çalıştırma."""
+"""Application entry point — initialises and runs the Dash server."""
 import dash
 import dash_bootstrap_components as dbc
 
@@ -6,7 +6,7 @@ from callbacks import env
 from layout import create_layout
 from callbacks import register_callbacks
 
-# ── Dash uygulaması ───────────────────────────────────────────────────────────
+# Dash application setup
 app = dash.Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
@@ -18,6 +18,5 @@ app = dash.Dash(
 app.layout = create_layout(env)
 register_callbacks(app)
 
-# ── Çalıştır ──────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     app.run(debug=False, host="127.0.0.1", port=8050)

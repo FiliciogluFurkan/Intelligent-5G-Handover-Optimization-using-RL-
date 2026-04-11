@@ -5,7 +5,7 @@ from dash import html
 
 from environment import HandoverEnv
 
-# Design tokens — eşleşmesi için CSS ile aynı değerler
+# Design tokens — match values in assets/style.css
 BS_COLORS   = ["#6366F1", "#3B82F6", "#10B981"]   # indigo / blue / emerald
 USER_COLORS = {
     "pedestrian": "#F97316",   # orange-500
@@ -19,18 +19,19 @@ USER_SYMBOLS = {
 }
 
 FONT_FAMILY = "Inter, system-ui, -apple-system, sans-serif"
-GRID_COLOR  = "#F1F5F9"   # slate-100 — çok soluk
+GRID_COLOR  = "#F1F5F9"   # slate-100 — very light
 AXIS_COLOR  = "#94A3B8"   # slate-400
 
 
 def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
     fig = go.Figure()
 
-    # ── Coverage circles ───────────────────────────────────────────────────
+    # Coverage circles (decorative — radius ~30% of area)
+    radius = env.area_size * 0.3
     for bs in env.base_stations:
         theta = np.linspace(0, 2 * np.pi, 80)
-        cx = bs.position[0] + 150 * np.cos(theta)
-        cy = bs.position[1] + 150 * np.sin(theta)
+        cx = bs.position[0] + radius * np.cos(theta)
+        cy = bs.position[1] + radius * np.sin(theta)
         fig.add_trace(go.Scatter(
             x=cx, y=cy, mode="lines",
             line=dict(color=BS_COLORS[bs.bs_id], width=1.5, dash="dot"),
@@ -38,7 +39,7 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
             showlegend=False, hoverinfo="skip",
         ))
 
-    # ── User → BS connection lines ─────────────────────────────────────────
+    # User to BS connection lines
     for user in env.users:
         if user.connected_bs is not None:
             bs = env.base_stations[user.connected_bs]
@@ -51,7 +52,7 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
                 showlegend=False, hoverinfo="skip",
             ))
 
-    # ── Base stations ──────────────────────────────────────────────────────
+    # Base stations
     for bs in env.base_stations:
         fig.add_trace(go.Scatter(
             x=[bs.position[0]],
@@ -76,7 +77,7 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
             ),
         ))
 
-    # ── Users ──────────────────────────────────────────────────────────────
+    # Users (grouped by type)
     for utype, symbol, color in [
         ("pedestrian", "circle",      USER_COLORS["pedestrian"]),
         ("vehicle",    "square",      USER_COLORS["vehicle"]),
@@ -101,23 +102,25 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
             ),
         ))
 
-    # ── Layout ────────────────────────────────────────────────────────────
+    # Layout — axes scale with env.area_size
+    area = env.area_size
     fig.update_layout(
         title=dict(
             text=f"Step {step}",
             font=dict(size=12, color=AXIS_COLOR, family=FONT_FAMILY),
             x=0.01, y=0.99, xanchor="left", yanchor="top",
         ),
-        paper_bgcolor="rgba(0,0,0,0)",   # şeffaf — card içine karışır
+        paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(
+            range=[0, area], autorange=False,
             showgrid=True, gridcolor=GRID_COLOR, gridwidth=1,
             zeroline=False,
             tickfont=dict(size=10, color=AXIS_COLOR, family=FONT_FAMILY),
             showline=False,
         ),
         yaxis=dict(
-            range=[0, 600], autorange=False,
+            range=[0, area], autorange=False,
             showgrid=True, gridcolor=GRID_COLOR, gridwidth=1,
             zeroline=False,
             tickfont=dict(size=10, color=AXIS_COLOR, family=FONT_FAMILY),
@@ -141,8 +144,8 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
 
 
 def build_chart(values: list, _title: str = "", color: str = "#4F46E5") -> go.Figure:
-    """Minimal alan doldurmalı zaman serisi."""
-    # Hex → rgba fill
+    """Minimal area-filled time-series chart."""
+    # Hex to rgba conversion for fill
     r, g, b = tuple(int(color.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
 
     fig = go.Figure()
@@ -179,7 +182,7 @@ def build_chart(values: list, _title: str = "", color: str = "#4F46E5") -> go.Fi
 
 
 def build_bs_load_bars(env: HandoverEnv) -> list:
-    """BS yük satırları — tamamen custom HTML, CSS ile şekillendiriliyor."""
+    """Base station load bars — custom HTML, styled via CSS."""
     bars = []
     for bs in env.base_stations:
         pct = int(bs.get_load() * 100)

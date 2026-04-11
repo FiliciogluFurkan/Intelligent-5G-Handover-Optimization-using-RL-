@@ -34,6 +34,7 @@ class User:
         # Random direction change (10% chance)
         if np.random.random() < 0.1:
             self.direction += np.random.uniform(-np.pi/4, np.pi/4)
+            self.direction = self.direction % (2 * np.pi)
 
 class Pedestrian(User):
     def __init__(self, user_id, position, area_size: float = 500.0):

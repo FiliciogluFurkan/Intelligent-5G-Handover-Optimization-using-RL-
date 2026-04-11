@@ -1,4 +1,5 @@
-"""Dash callbacks — tüm simülasyon mantığı burada."""
+"""Dash callbacks — all simulation logic is handled here."""
+import logging
 import os
 import numpy as np
 import dash
@@ -8,15 +9,15 @@ from environment import HandoverEnv
 import agents
 from figures import build_network_figure, build_chart, build_bs_load_bars
 
-# Modül seviyesinde env (tek process — thread-safe değil ama demo için yeterli)
-env: HandoverEnv = HandoverEnv(area_size=600)
+# Module-level env instance (single-process demo only — not thread-safe)
+env: HandoverEnv = HandoverEnv()
 env.reset()
 
 
 def register_callbacks(app: dash.Dash) -> None:
-    """Tüm callback'leri verilen Dash uygulamasına kaydet."""
+    """Register all callbacks with the given Dash application."""
 
-    # ── Kontrol butonları ─────────────────────────────────────────────────────
+    # Control buttons: Start / Stop / Reset / Algorithm switch
     @app.callback(
         Output("sim-state",   "data"),
         Output("interval",    "disabled"),
@@ -39,7 +40,7 @@ def register_callbacks(app: dash.Dash) -> None:
         interval_ms = max(100, 1000 // (speed or 3))
 
         if triggered == "btn-reset":
-            env = HandoverEnv(area_size=600)
+            env = HandoverEnv()
             env.reset()
             state = {
                 "running":   False,
@@ -53,8 +54,7 @@ def register_callbacks(app: dash.Dash) -> None:
             if algorithm in ("dqn", "ppo"):
                 path = f"models/{algorithm}_handover.zip"
                 if not os.path.exists(path):
-                    alert_msg  = (f"Model bulunamadı: {path} — "
-                                  f"önce train.py çalıştırın.")
+                    alert_msg  = (f"Model not found: {path} — run train.py first.")
                     alert_open = True
                     state["running"] = False
                     return state, True, interval_ms, alert_msg, alert_open
@@ -70,7 +70,7 @@ def register_callbacks(app: dash.Dash) -> None:
         disabled = not state["running"]
         return state, disabled, interval_ms, alert_msg, alert_open
 
-    # ── Simülasyon tick'i (her interval'da çalışır) ───────────────────────────
+    # Simulation tick (fires on every interval)
     @app.callback(
         Output("network-map",      "figure"),
         Output("metric-handovers", "children"),
@@ -103,25 +103,26 @@ def register_callbacks(app: dash.Dash) -> None:
             action = agents.get_action(algorithm, env)
             _, _, terminated, _, _ = env.step(action)
         except Exception as exc:
+            logging.exception("Simulation step error")
             state["running"] = False
-            alert_msg  = str(exc)
+            alert_msg  = "Simulation error — check server logs."
             alert_open = True
             return _pack_outputs(env, state, True, alert_msg, alert_open)
 
         if terminated:
             env.reset()
 
-        # Geçmişi güncelle
+        # Update history
         state["step"] += 1
         hist = state["history"]
         hist["handovers"].append(env.total_handovers)
         hist["sinr"].append(_avg_sinr(env))
-        hist["energy"].append(_total_energy(env))
+        hist["energy"].append(_energy_per_step(env, state["step"]))
 
         return _pack_outputs(env, state, False, alert_msg, alert_open)
 
 
-# ── Yardımcı fonksiyonlar ──────────────────────────────────────────────────────
+# Helper functions
 
 def _avg_sinr(env: HandoverEnv) -> float:
     sinrs = [
@@ -131,8 +132,10 @@ def _avg_sinr(env: HandoverEnv) -> float:
     return float(np.mean(sinrs)) if sinrs else 0.0
 
 
-def _total_energy(env: HandoverEnv) -> float:
-    return sum(bs.total_energy for bs in env.base_stations)
+def _energy_per_step(env: HandoverEnv, step: int) -> float:
+    """Return average energy per step to keep chart interpretable."""
+    total = sum(bs.total_energy for bs in env.base_stations)
+    return total / max(step, 1)
 
 
 def _pack_outputs(env, state, interval_disabled, alert_msg, alert_open):
@@ -146,7 +149,7 @@ def _pack_outputs(env, state, interval_disabled, alert_msg, alert_open):
         build_bs_load_bars(env),
         build_chart(hist["handovers"], "Handovers Over Time",      "#4F46E5"),
         build_chart(hist["sinr"],      "Avg SINR (dB) Over Time",  "#059669"),
-        build_chart(hist["energy"],    "Energy Consumption",       "#E11D48"),
+        build_chart(hist["energy"],    "Energy / Step",            "#E11D48"),
         state,
         interval_disabled,
         alert_msg,

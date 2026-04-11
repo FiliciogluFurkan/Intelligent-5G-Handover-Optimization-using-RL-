@@ -25,7 +25,7 @@ class TestBaseStationInit:
 
     def test_init_empty_users_and_zero_energy(self):
         bs = BaseStation(0, [0, 0])
-        assert bs.connected_users == []
+        assert len(bs.connected_users) == 0
         assert bs.total_energy == 0.0
 
 
@@ -66,7 +66,7 @@ class TestBaseStationUserManagement:
     def test_add_user_no_duplicate(self):
         self.bs.add_user(self.user)
         self.bs.add_user(self.user)
-        assert self.bs.connected_users.count(self.user) == 1
+        assert len(self.bs.connected_users) == 1
 
     def test_remove_user_disconnects(self):
         self.bs.add_user(self.user)

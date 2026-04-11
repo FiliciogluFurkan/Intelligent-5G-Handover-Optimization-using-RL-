@@ -1,4 +1,4 @@
-"""Dash layout — tüm UI bileşenleri burada tanımlı."""
+"""Dash layout — all UI components are defined here."""
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 

@@ -1,4 +1,5 @@
 """Central configuration for 5G Handover Optimization project."""
+import math
 from dataclasses import dataclass
 import numpy as np
 
@@ -28,7 +29,7 @@ class UserConfig:
     emergency_speed_kmh: float = 120.0
     max_speed_kmh: float = 120.0
     direction_change_prob: float = 0.1
-    direction_change_max_rad: float = 3.14159 / 4
+    direction_change_max_rad: float = math.pi / 4
 
 
 @dataclass(frozen=True)
@@ -66,9 +67,9 @@ USERS = UserConfig()
 TRAIN = TrainingConfig()
 REWARD = RewardConfig()
 
-# Fixed base station positions
+# Fixed base station positions in 500x500m area
 BS_POSITIONS = [
-    [125.0, 250.0],
-    [250.0, 125.0],
-    [375.0, 375.0],
+    [150.0, 300.0],
+    [300.0, 200.0],
+    [450.0, 430.0],
 ]
