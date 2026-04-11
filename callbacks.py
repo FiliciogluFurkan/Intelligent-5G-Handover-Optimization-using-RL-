@@ -211,9 +211,9 @@ def _build_handover_log(log: list):
     for entry in log:
         color = _TYPE_COLORS.get(entry["type"], "#6B7280")
         rows.append(_html.Div([
-            _html.Span(f"{entry['step']:>4}",
+            _html.Span(f"t{entry['step']}",
                        style={"color": "#94A3B8", "fontSize": "11px",
-                               "minWidth": "32px", "fontFamily": "monospace"}),
+                               "minWidth": "36px", "fontFamily": "monospace"}),
             _html.Span(entry["type"].capitalize(),
                        style={"color": color, "fontSize": "11px",
                                "minWidth": "80px", "fontWeight": "600"}),

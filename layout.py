@@ -158,6 +158,9 @@ def create_layout(env: HandoverEnv) -> html.Div:
                         html.Div([
                             html.Span("🔀", style={"fontSize": "14px"}),
                             html.P("Handover Log", className="card-header-label"),
+                            html.Span("t = time step",
+                                      style={"fontSize": "10px", "color": "#94A3B8",
+                                             "marginLeft": "auto"}),
                         ], className="card-header-flat"),
                         html.Div(id="handover-log", children=[
                             html.P("No handovers yet.",
