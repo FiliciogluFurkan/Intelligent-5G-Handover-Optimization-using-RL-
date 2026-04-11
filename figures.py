@@ -137,6 +137,7 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
             font=dict(size=12, color=AXIS_COLOR, family=FONT_FAMILY),
             x=0.01, y=0.99, xanchor="left", yanchor="top",
         ),
+        uirevision="network-map",   # preserves zoom/pan across figure updates
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(

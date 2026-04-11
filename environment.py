@@ -9,7 +9,7 @@ from config.settings import SIM, BS_POSITIONS, REWARD
 class HandoverEnv(gym.Env):
     """5G Handover Optimization Environment"""
 
-    def __init__(self, num_users=None, area_size=None):
+    def __init__(self, num_users=None, area_size=None, max_steps=None):
         super().__init__()
 
         self.area_size = area_size if area_size is not None else SIM.area_size
@@ -25,7 +25,7 @@ class HandoverEnv(gym.Env):
         self.users = []
         self.time_step = 0
         self.user_step = 0
-        self.max_steps = SIM.max_steps
+        self.max_steps = max_steps if max_steps is not None else SIM.max_steps
 
         # Action space: select BS for each user (0, 1, 2, or 3=no change)
         self.action_space = spaces.Discrete(4)

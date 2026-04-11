@@ -10,7 +10,8 @@ import agents
 from figures import build_network_figure, build_chart, build_bs_load_bars
 
 # Module-level env instance (single-process demo only — not thread-safe)
-env: HandoverEnv = HandoverEnv()
+DASHBOARD_MAX_STEPS = 300
+env: HandoverEnv = HandoverEnv(max_steps=DASHBOARD_MAX_STEPS)
 env.reset()
 
 
@@ -42,7 +43,7 @@ def register_callbacks(app: dash.Dash) -> None:
         num_users   = int(num_users or 15)
 
         if triggered == "btn-reset":
-            env = HandoverEnv(num_users=num_users)
+            env = HandoverEnv(num_users=num_users, max_steps=DASHBOARD_MAX_STEPS)
             env.reset()
             state = {
                 "running":        False,
