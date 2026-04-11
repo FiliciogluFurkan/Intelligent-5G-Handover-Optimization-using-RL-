@@ -13,9 +13,14 @@ USER_COLORS = {
     "emergency":  "#E11D48",   # rose-600
 }
 USER_SYMBOLS = {
-    "pedestrian": "circle",
-    "vehicle":    "square",
-    "emergency":  "triangle-up",
+    "pedestrian": "circle-dot",
+    "vehicle":    "arrow-up",    # rotated per-user to show movement direction
+    "emergency":  "star",
+}
+USER_SIZES = {
+    "pedestrian": 9,
+    "vehicle":    13,
+    "emergency":  14,
 }
 
 FONT_FAMILY = "Inter, system-ui, -apple-system, sans-serif"
@@ -78,23 +83,35 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
         ))
 
     # Users (grouped by type)
-    for utype, symbol, color in [
-        ("pedestrian", "circle",      USER_COLORS["pedestrian"]),
-        ("vehicle",    "square",      USER_COLORS["vehicle"]),
-        ("emergency",  "triangle-up", USER_COLORS["emergency"]),
-    ]:
+    for utype in ("pedestrian", "vehicle", "emergency"):
         users = [u for u in env.users if u.user_type == utype]
         if not users:
             continue
+
+        symbol = USER_SYMBOLS[utype]
+        color  = USER_COLORS[utype]
+        size   = USER_SIZES[utype]
+
+        # Vehicles: rotate arrow marker to show actual movement direction
+        # Plotly angle=0 → arrow points up; convert math radians → clockwise-from-north
+        if utype == "vehicle":
+            angles = [90 - float(np.degrees(u.direction)) for u in users]
+        else:
+            angles = 0
+
+        speeds = {"pedestrian": "5 km/h", "vehicle": "60 km/h", "emergency": "120 km/h"}
         fig.add_trace(go.Scatter(
             x=[u.position[0] for u in users],
             y=[u.position[1] for u in users],
             mode="markers",
             marker=dict(
-                symbol=symbol, size=9, color=color,
+                symbol=symbol,
+                size=size,
+                color=color,
+                angle=angles,
                 line=dict(width=1.5, color="white"),
             ),
-            name=utype.capitalize(),
+            name=f"{utype.capitalize()} ({speeds[utype]})",
             hovertemplate=(
                 f"<b>{utype.capitalize()}</b><br>"
                 "x: %{x:.0f}  y: %{y:.0f}"
