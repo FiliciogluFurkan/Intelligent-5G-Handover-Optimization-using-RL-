@@ -24,6 +24,15 @@ USER_SIZES = {
 }
 
 FONT_FAMILY = "Inter, system-ui, -apple-system, sans-serif"
+
+
+def _sinr_color(sinr: float) -> str:
+    """Map SINR (dB) to a colour: red (weak) → amber (medium) → green (strong)."""
+    if sinr > 15:
+        return "#10B981"   # emerald — good
+    if sinr > 5:
+        return "#F59E0B"   # amber  — medium
+    return "#EF4444"       # red    — weak
 GRID_COLOR  = "#F1F5F9"   # slate-100 — very light
 AXIS_COLOR  = "#94A3B8"   # slate-400
 
@@ -44,16 +53,17 @@ def build_network_figure(env: HandoverEnv, step: int) -> go.Figure:
             showlegend=False, hoverinfo="skip",
         ))
 
-    # User to BS connection lines
+    # User to BS connection lines — coloured by SINR quality
     for user in env.users:
         if user.connected_bs is not None:
-            bs = env.base_stations[user.connected_bs]
+            bs   = env.base_stations[user.connected_bs]
+            sinr = bs.calculate_sinr(user.position)
             fig.add_trace(go.Scatter(
                 x=[user.position[0], bs.position[0]],
                 y=[user.position[1], bs.position[1]],
                 mode="lines",
-                line=dict(color=BS_COLORS[user.connected_bs], width=0.75),
-                opacity=0.4,
+                line=dict(color=_sinr_color(sinr), width=1.2),
+                opacity=0.7,
                 showlegend=False, hoverinfo="skip",
             ))
 

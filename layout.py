@@ -25,6 +25,8 @@ def create_layout(env: HandoverEnv) -> html.Div:
             dcc.Store(id="sim-state", data={
                 "running": False, "step": 0, "algorithm": "baseline",
                 "num_users": 15,
+                "episode_reward": 0.0,
+                "run_results": {},
                 "history": {"handovers": [], "sinr": [], "energy": [],
                             "handover_log": []},
             }),
@@ -209,7 +211,23 @@ def create_layout(env: HandoverEnv) -> html.Div:
                                     "Avg SINR (dB)", "📊"), width=4),
                 dbc.Col(_chart_card("chart-energy",
                                     "Energy Consumption",""), width=4),
-            ], className="g-3"),
+            ], className="g-3 mb-4"),
+
+            # ── Run comparison panel ────────────────────────────────────────
+            html.Div([
+                html.Div([
+                    html.Span("📊", style={"fontSize": "14px"}),
+                    html.P("Run Comparison", className="card-header-label"),
+                    html.Span("Updates at end of each episode",
+                              style={"fontSize": "10px", "color": "#94A3B8",
+                                     "marginLeft": "auto"}),
+                ], className="card-header-flat"),
+                html.Div(id="comparison-panel", children=[
+                    html.P("Run at least one episode to see results.",
+                           style={"color": "#94A3B8", "fontSize": "12px",
+                                  "padding": "12px 16px", "margin": 0}),
+                ]),
+            ], className="card-flat"),
 
         ], className="page-wrapper"),
     ])

@@ -45,12 +45,14 @@ def register_callbacks(app: dash.Dash) -> None:
             env = HandoverEnv(num_users=num_users)
             env.reset()
             state = {
-                "running":   False,
-                "step":      0,
-                "algorithm": algorithm,
-                "num_users": num_users,
-                "history":   {"handovers": [], "sinr": [], "energy": [],
-                              "handover_log": []},
+                "running":        False,
+                "step":           0,
+                "algorithm":      algorithm,
+                "num_users":      num_users,
+                "episode_reward": 0.0,
+                "run_results":    {},
+                "history":        {"handovers": [], "sinr": [], "energy": [],
+                                   "handover_log": []},
             }
             return state, True, interval_ms, alert_msg, alert_open
 
@@ -89,9 +91,10 @@ def register_callbacks(app: dash.Dash) -> None:
         Output("interval",         "disabled",  allow_duplicate=True),
         Output("error-alert",      "children",  allow_duplicate=True),
         Output("error-alert",      "is_open",   allow_duplicate=True),
-        Output("progress-fill",    "style"),
-        Output("progress-label",   "children"),
-        Output("handover-log",     "children"),
+        Output("progress-fill",      "style"),
+        Output("progress-label",     "children"),
+        Output("handover-log",       "children"),
+        Output("comparison-panel",   "children"),
         Input("interval", "n_intervals"),
         State("sim-state", "data"),
         prevent_initial_call=True,
@@ -135,7 +138,19 @@ def register_callbacks(app: dash.Dash) -> None:
             alert_open = True
             return _pack_outputs(env, state, True, alert_msg, alert_open)
 
+        # Accumulate episode reward (reward not returned by step — proxy via SINR)
+        state["episode_reward"] = state.get("episode_reward", 0.0) + _avg_sinr(env)
+
         if terminated:
+            # Save this run's metrics before resetting
+            algo_label = algorithm.upper()
+            state.setdefault("run_results", {})[algo_label] = {
+                "ho_rate":    round(env.total_handovers / max(env.time_step, 1), 3),
+                "pp_rate":    round(env.ping_pong_count / max(env.total_handovers, 1), 3),
+                "avg_sinr":   round(_avg_sinr(env), 1),
+                "em_disc":    env.emergency_disconnections,
+            }
+            state["episode_reward"] = 0.0
             env.reset()
 
         # Update history
@@ -192,7 +207,55 @@ def _pack_outputs(env, state, interval_disabled, alert_msg, alert_open):
         progress_style,
         f"{cur_step} / {max_steps}",
         _build_handover_log(hist.get("handover_log", [])),
+        _build_comparison_panel(state.get("run_results", {})),
     )
+
+
+_ALGO_COLORS = {
+    "BASELINE": "#6B7280",
+    "DQN":      "#3B82F6",
+    "PPO":      "#10B981",
+}
+
+def _build_comparison_panel(run_results: dict):
+    from dash import html as _html
+    if not run_results:
+        return [_html.P("Run at least one episode to see results.",
+                        style={"color": "#94A3B8", "fontSize": "12px",
+                               "padding": "12px 16px", "margin": 0})]
+
+    _S = {"fontSize": "12px", "padding": "6px 12px", "fontFamily": "monospace"}
+    _H = {"fontSize": "11px", "color": "#94A3B8", "padding": "4px 12px",
+          "fontWeight": "600", "textTransform": "uppercase", "letterSpacing": "0.05em"}
+
+    header = _html.Div([
+        _html.Span("Algorithm",  style={**_H, "minWidth": "100px"}),
+        _html.Span("HO / step",  style={**_H, "minWidth": "80px"}),
+        _html.Span("Ping-Pong",  style={**_H, "minWidth": "80px"}),
+        _html.Span("Avg SINR",   style={**_H, "minWidth": "80px"}),
+        _html.Span("Em. Disc.",  style={**_H, "minWidth": "70px"}),
+    ], style={"display": "flex", "borderBottom": "2px solid #E2E8F0"})
+
+    rows = [header]
+    for algo in ["BASELINE", "DQN", "PPO"]:
+        if algo not in run_results:
+            continue
+        r     = run_results[algo]
+        color = _ALGO_COLORS.get(algo, "#6B7280")
+        pp_pct = f"{r['pp_rate']*100:.1f}%"
+        rows.append(_html.Div([
+            _html.Span(algo, style={**_S, "minWidth": "100px",
+                                    "color": color, "fontWeight": "700",
+                                    "fontFamily": "Inter, sans-serif"}),
+            _html.Span(f"{r['ho_rate']:.3f}",  style={**_S, "minWidth": "80px"}),
+            _html.Span(pp_pct,                  style={**_S, "minWidth": "80px",
+                                                        "color": "#EF4444" if r["pp_rate"] > 0 else "#10B981",
+                                                        "fontWeight": "600"}),
+            _html.Span(f"{r['avg_sinr']} dB",  style={**_S, "minWidth": "80px"}),
+            _html.Span(str(r["em_disc"]),       style={**_S, "minWidth": "70px"}),
+        ], style={"display": "flex", "borderBottom": "1px solid #F1F5F9",
+                  "alignItems": "center"}))
+    return rows
 
 
 _TYPE_COLORS = {
