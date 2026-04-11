@@ -1,5 +1,7 @@
 import os
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from stable_baselines3 import DQN, PPO
 from environment import HandoverEnv

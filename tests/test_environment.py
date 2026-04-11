@@ -21,7 +21,7 @@ class TestHandoverEnvInit:
 
     def test_observation_space_shape(self):
         env = HandoverEnv()
-        assert env.observation_space.shape == (8,)
+        assert env.observation_space.shape == (9,)
 
     def test_action_space_size(self):
         env = HandoverEnv()
@@ -32,7 +32,7 @@ class TestHandoverEnvReset:
     def test_reset_returns_correct_obs_shape(self):
         env = HandoverEnv(num_users=5)
         obs, info = env.reset()
-        assert obs.shape == (8,)
+        assert obs.shape == (9,)
 
     def test_reset_creates_users(self):
         env = HandoverEnv(num_users=5)
@@ -66,7 +66,7 @@ class TestHandoverEnvStep:
 
     def test_step_obs_shape(self):
         obs, reward, terminated, truncated, info = self.env.step(0)
-        assert obs.shape == (8,)
+        assert obs.shape == (9,)
 
     def test_step_reward_is_float(self):
         _, reward, _, _, _ = self.env.step(0)

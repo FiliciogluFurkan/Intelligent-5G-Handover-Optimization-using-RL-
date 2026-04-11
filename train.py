@@ -37,7 +37,7 @@ def train_agent(algorithm="DQN", total_timesteps=200_000):
         best_model_save_path=f"models/best_{algo.lower()}/",
         log_path=f"models/{algo.lower()}_eval_logs/",
         eval_freq=10_000,
-        n_eval_episodes=5,
+        n_eval_episodes=10,
         deterministic=True,
         verbose=1,
     )
@@ -59,6 +59,7 @@ def train_agent(algorithm="DQN", total_timesteps=200_000):
             "MlpPolicy", env, verbose=1,
             learning_rate=TRAIN.ppo_learning_rate,
             n_steps=TRAIN.ppo_n_steps,
+            n_epochs=TRAIN.ppo_n_epochs,
             batch_size=TRAIN.ppo_batch_size,
             gamma=TRAIN.ppo_gamma,
             gae_lambda=TRAIN.ppo_gae_lambda,
@@ -80,11 +81,11 @@ def train_agent(algorithm="DQN", total_timesteps=200_000):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Training DQN Agent (200k timesteps)")
+    print("Training DQN Agent (400k timesteps)")
     print("=" * 60)
-    train_agent("DQN", total_timesteps=200_000)
+    train_agent("DQN", total_timesteps=400_000)
 
     print("\n" + "=" * 60)
-    print("Training PPO Agent (200k timesteps)")
+    print("Training PPO Agent (400k timesteps)")
     print("=" * 60)
-    train_agent("PPO", total_timesteps=200_000)
+    train_agent("PPO", total_timesteps=400_000)

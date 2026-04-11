@@ -30,10 +30,10 @@ class HandoverEnv(gym.Env):
         # Action space: select BS for each user (0, 1, 2, or 3=no change)
         self.action_space = spaces.Discrete(4)
 
-        # Observation space: SINR(3), load(3), velocity, handover_count
+        # Observation space: SINR(3), load(3), velocity, handover_count, user_type
         self.observation_space = spaces.Box(
-            low=np.array([-120, -120, -120, 0, 0, 0, 0, 0], dtype=np.float32),
-            high=np.array([50, 50, 50, 1, 1, 1, 1, 1], dtype=np.float32),
+            low=np.array([-120, -120, -120, 0, 0, 0, 0, 0, 0], dtype=np.float32),
+            high=np.array([50, 50, 50, 1, 1, 1, 1, 1, 1], dtype=np.float32),
             dtype=np.float32
         )
 
@@ -88,8 +88,9 @@ class HandoverEnv(gym.Env):
         loads = [bs.get_load() for bs in self.base_stations]
         velocity_norm = user.velocity / self.max_velocity
         handover_norm = min(user.handover_count / 10.0, 1.0)
+        type_norm     = {"pedestrian": 0.0, "vehicle": 0.5, "emergency": 1.0}[user.user_type]
 
-        obs = np.array(sinrs + loads + [velocity_norm, handover_norm], dtype=np.float32)
+        obs = np.array(sinrs + loads + [velocity_norm, handover_norm, type_norm], dtype=np.float32)
         return obs
 
     def step(self, action):
@@ -111,24 +112,38 @@ class HandoverEnv(gym.Env):
                 user.handover_count += 1
                 self.total_handovers += 1
 
-                # Ping-pong detection: compare against per-user time_step window
-                if hasattr(user, 'last_handover_time_step'):
-                    if self.time_step - user.last_handover_time_step < REWARD.ping_pong_window_steps:
-                        self.ping_pong_count += 1
-                        reward -= REWARD.ping_pong_penalty
+                # Ping-pong detection — emergency vehicles are exempt
+                if user.user_type != "emergency":
+                    if hasattr(user, 'last_handover_time_step'):
+                        if self.time_step - user.last_handover_time_step < REWARD.ping_pong_window_steps:
+                            self.ping_pong_count += 1
+                            reward -= REWARD.ping_pong_penalty
 
                 user.last_handover_time_step = self.time_step
-                reward -= REWARD.handover_penalty
+
+                # Emergency handovers are cheap — encourage signal tracking
+                if user.user_type == "emergency":
+                    reward -= REWARD.handover_penalty * REWARD.emergency_handover_factor
+                else:
+                    reward -= REWARD.handover_penalty
+
+                # Handover latency: SINR reward lost during the switching instant
+                # Normal users lose full SINR (LTE ~50ms), emergency lose 20% (5G NR ~5ms)
+                pre_sinr = self.base_stations[action].calculate_sinr(user.position)
+                latency_factor = REWARD.emergency_latency_factor if user.user_type == "emergency" \
+                                 else REWARD.handover_latency_factor
+                reward -= (pre_sinr / REWARD.sinr_scale) * latency_factor
 
         # Guard: if user has no connection (edge case), connect to best SINR BS
         if user.connected_bs is None:
             best = int(np.argmax([bs.calculate_sinr(user.position) for bs in self.base_stations]))
             self.base_stations[best].add_user(user)
 
-        # Calculate reward based on SINR
-        current_bs = self.base_stations[user.connected_bs]
-        sinr = current_bs.calculate_sinr(user.position)
-        reward += sinr / REWARD.sinr_scale
+        # Calculate reward based on SINR — emergency vehicles weighted higher
+        current_bs  = self.base_stations[user.connected_bs]
+        sinr        = current_bs.calculate_sinr(user.position)
+        sinr_weight = REWARD.emergency_sinr_weight if user.user_type == "emergency" else 1.0
+        reward += sinr / REWARD.sinr_scale * sinr_weight
 
         # Emergency vehicle with low SINR — count only on zone entry (state transition)
         was_weak = getattr(user, '_in_weak_zone', False)
@@ -138,6 +153,9 @@ class HandoverEnv(gym.Env):
             if not was_weak:
                 self.emergency_disconnections += 1
         user._in_weak_zone = in_weak
+
+        # Gap penalty disabled: accumulates across all steps including non-acting steps,
+        # causing reward explosion in multi-user cycling environment.
 
         # Energy consumption penalty (proportional to BS load)
         energy = current_bs.get_load() * REWARD.energy_scale
