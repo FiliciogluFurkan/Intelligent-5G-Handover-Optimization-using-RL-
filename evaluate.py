@@ -92,34 +92,64 @@ def _mean_std(values):
     return float(np.mean(values)), float(np.std(values))
 
 
+def _load_model(algo: str, use_best: bool):
+    """Load final or best checkpoint for a given algorithm."""
+    cls = DQN if algo == "dqn" else PPO
+    if use_best:
+        path = f"models/best_{algo}/best_model.zip"
+        if not os.path.exists(path):
+            print(f"  [warn] best model not found at '{path}', falling back to final.")
+            path = f"models/{algo}_handover"
+    else:
+        path = f"models/{algo}_handover"
+    return cls.load(path)
+
+
 def compare_methods():
-    """Compare baseline vs DQN vs PPO with statistical reporting."""
+    """Compare baseline vs DQN vs PPO (final and best) with statistical reporting."""
     os.makedirs("figures", exist_ok=True)
 
     print("Evaluating Baseline (greedy SINR)...")
     baseline = evaluate_baseline()
 
-    print("Evaluating DQN Agent...")
-    dqn_model = DQN.load("models/dqn_handover")
-    dqn = evaluate_agent(dqn_model)
+    print("Evaluating DQN — final model (200k steps)...")
+    dqn_final = evaluate_agent(_load_model("dqn", use_best=False))
 
-    print("Evaluating PPO Agent...")
-    ppo_model = PPO.load("models/ppo_handover")
-    ppo = evaluate_agent(ppo_model)
+    print("Evaluating DQN — best checkpoint...")
+    dqn_best = evaluate_agent(_load_model("dqn", use_best=True))
 
-    results = {"Baseline": baseline, "DQN": dqn, "PPO": ppo}
+    print("Evaluating PPO — final model (200k steps)...")
+    ppo_final = evaluate_agent(_load_model("ppo", use_best=False))
+
+    print("Evaluating PPO — best checkpoint...")
+    ppo_best = evaluate_agent(_load_model("ppo", use_best=True))
+
+    results = {
+        "Baseline":  baseline,
+        "DQN\n(final)": dqn_final,
+        "DQN\n(best)":  dqn_best,
+        "PPO\n(final)": ppo_final,
+        "PPO\n(best)":  ppo_best,
+    }
 
     # Print comparison table with mean ± std
-    print("\n" + "=" * 65)
+    print("\n" + "=" * 75)
     print(f"PERFORMANCE COMPARISON — {NUM_EPISODES} Episodes Each, Fixed Seeds")
-    print("=" * 65)
+    print("=" * 75)
+    labels = {
+        "Baseline":       "Baseline    ",
+        "DQN\n(final)":   "DQN (final) ",
+        "DQN\n(best)":    "DQN (best)  ",
+        "PPO\n(final)":   "PPO (final) ",
+        "PPO\n(best)":    "PPO (best)  ",
+    }
     for name, r in results.items():
         rm,  rs  = _mean_std(r["rewards"])
         hrm, hrs = _mean_std(r["handover_rates"])
         sm,  ss  = _mean_std(r["avg_sinrs"])
         ppm, pps = _mean_std(r["ping_pong_rates"])
         em,  es  = _mean_std(r["emergency_disc"])
-        print(f"\n{name}:")
+        print(f"\n{labels[name]}:")
         print(f"  Avg Reward:        {rm:8.1f} ± {rs:.1f}")
         print(f"  Handover Rate:     {hrm:8.2f} ± {hrs:.2f}  (HOs/time-step)")
         print(f"  Avg SINR:          {sm:8.2f} ± {ss:.2f}  dB")
@@ -137,7 +167,7 @@ def plot_comparison(results: dict):
                  fontsize=14, fontweight="bold", y=1.01)
 
     methods = list(results.keys())
-    colors = ["#6B7280", "#3B82F6", "#10B981"]
+    colors = ["#6B7280", "#3B82F6", "#93C5FD", "#10B981", "#6EE7B7"]
 
     metrics = [
         ("rewards",        "Average Reward",                  "Reward"),
