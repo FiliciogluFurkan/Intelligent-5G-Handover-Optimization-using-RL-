@@ -25,7 +25,8 @@ def create_layout(env: HandoverEnv) -> html.Div:
             dcc.Store(id="sim-state", data={
                 "running": False, "step": 0, "algorithm": "baseline",
                 "num_users": 15,
-                "history": {"handovers": [], "sinr": [], "energy": []},
+                "history": {"handovers": [], "sinr": [], "energy": [],
+                            "handover_log": []},
             }),
             dcc.Interval(id="interval", interval=500, n_intervals=0, disabled=True),
 
@@ -150,6 +151,19 @@ def create_layout(env: HandoverEnv) -> html.Div:
                                    className="card-header-label"),
                         ], className="card-header-flat"),
                         html.Div(id="bs-load-bars", className="bs-row"),
+                    ], className="card-flat mb-3"),
+
+                    # Handover Log
+                    html.Div([
+                        html.Div([
+                            html.Span("🔀", style={"fontSize": "14px"}),
+                            html.P("Handover Log", className="card-header-label"),
+                        ], className="card-header-flat"),
+                        html.Div(id="handover-log", children=[
+                            html.P("No handovers yet.",
+                                   style={"color": "#94A3B8", "fontSize": "12px",
+                                          "padding": "8px 12px", "margin": 0}),
+                        ]),
                     ], className="card-flat mb-3"),
 
                     # Legend
