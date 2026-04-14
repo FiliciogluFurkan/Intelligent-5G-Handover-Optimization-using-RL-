@@ -55,7 +55,7 @@ class RewardConfig:
     sinr_scale: float = 10.0
     handover_penalty: float = 0.3              # base handover cost (reduced: was 0.5)
     ping_pong_penalty: float = 2.0             # reduced from 5.0 — was too punishing
-    emergency_sinr_threshold_db: float = 0.0   # disconnect penalty trigger (~330m from BS)
+    emergency_sinr_threshold_db: float = -5.0  # disconnect penalty trigger (~480m from BS)
     emergency_disconnect_penalty: float = 30.0
     emergency_sinr_weight: float = 2.5         # emergency SINR reward 2.5x stronger
     emergency_handover_factor: float = 0.1     # emergency handover base cost ×0.1

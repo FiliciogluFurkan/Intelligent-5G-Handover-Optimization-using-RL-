@@ -22,7 +22,7 @@ def create_layout(env: HandoverEnv) -> html.Div:
         html.Div([
 
             # State & Timer
-            dcc.Store(id="sim-state", data={
+            dcc.Store(id="sim-state", storage_type="memory", data={
                 "running": False, "step": 0, "algorithm": "baseline",
                 "num_users": 15,
                 "episode_reward": 0.0,
@@ -141,8 +141,6 @@ def create_layout(env: HandoverEnv) -> html.Div:
                                      "0.0", "c-emerald"),
                         _metric_cell("Ping-Pong",        "metric-pingpong",
                                      "0",   "c-amber"),
-                        _metric_cell("Emergency Disc.",  "metric-emergency",
-                                     "0",   "c-rose"),
                     ], className="card-flat metrics-grid mb-3"),
 
                     # BS Load
@@ -206,11 +204,9 @@ def create_layout(env: HandoverEnv) -> html.Div:
             # ── Time-series charts ─────────────────────────────────────────
             dbc.Row([
                 dbc.Col(_chart_card("chart-handovers",
-                                    "Handovers", "📈"), width=4),
+                                    "Handovers", "📈"), width=6),
                 dbc.Col(_chart_card("chart-sinr",
-                                    "Avg SINR (dB)", "📊"), width=4),
-                dbc.Col(_chart_card("chart-energy",
-                                    "Energy Consumption",""), width=4),
+                                    "Avg SINR (dB)", "📊"), width=6),
             ], className="g-3 mb-4"),
 
             # ── Run comparison panel ────────────────────────────────────────

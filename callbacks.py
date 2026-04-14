@@ -10,7 +10,7 @@ import agents
 from figures import build_network_figure, build_chart, build_bs_load_bars
 
 # Module-level env instance (single-process demo only — not thread-safe)
-DASHBOARD_MAX_STEPS = 300
+DASHBOARD_MAX_STEPS = 200
 env: HandoverEnv = HandoverEnv(max_steps=DASHBOARD_MAX_STEPS)
 env.reset()
 
@@ -54,25 +54,47 @@ def register_callbacks(app: dash.Dash) -> None:
                 "run_results":    {},
                 "history":        {"handovers": [], "sinr": [], "energy": [],
                                    "handover_log": []},
+                "_stop_at":       -1,
+                "_paused":        False,
             }
             return state, True, interval_ms, alert_msg, alert_open
 
         if triggered == "btn-start":
-            if algorithm in ("dqn", "ppo"):
-                path = f"models/{algorithm}_handover.zip"
-                if not os.path.exists(path):
-                    alert_msg  = (f"Model not found: {path} — run train.py first.")
-                    alert_open = True
-                    state["running"] = False
-                    return state, True, interval_ms, alert_msg, alert_open
-            state["running"]   = True
-            state["algorithm"] = algorithm
+            if not state.get("running", False):
+                if state.get("_paused", False):
+                    # Resume from where it was stopped
+                    state["running"] = True
+                    state["_paused"] = False
+                    state["_stop_at"] = -1
+                else:
+                    # Fresh start
+                    if algorithm in ("dqn", "ppo"):
+                        path = f"models/{algorithm}_handover.zip"
+                        if not os.path.exists(path):
+                            alert_msg  = (f"Model not found: {path} — run train.py first.")
+                            alert_open = True
+                            state["running"] = False
+                            return state, True, interval_ms, alert_msg, alert_open
+                    env = HandoverEnv(num_users=num_users, max_steps=DASHBOARD_MAX_STEPS)
+                    env.reset()
+                    state["running"]        = True
+                    state["algorithm"]      = algorithm
+                    state["step"]           = 0
+                    state["episode_reward"] = 0.0
+                    state["_stop_at"]       = -1
+                    state["history"]        = {"handovers": [], "sinr": [], "energy": [],
+                                               "handover_log": []}
 
         if triggered == "btn-stop":
-            state["running"] = False
+            state["running"]  = False
+            state["_paused"]  = True
+            state["_stop_at"] = state.get("step", 0)
 
         if triggered == "algo-dropdown":
             state["algorithm"] = algorithm
+            state["running"]  = False
+            state["_paused"]  = False
+            state["_stop_at"] = -1
 
         disabled = not state["running"]
         return state, disabled, interval_ms, alert_msg, alert_open
@@ -83,11 +105,9 @@ def register_callbacks(app: dash.Dash) -> None:
         Output("metric-handovers", "children"),
         Output("metric-sinr",      "children"),
         Output("metric-pingpong",  "children"),
-        Output("metric-emergency", "children"),
         Output("bs-load-bars",     "children"),
         Output("chart-handovers",  "figure"),
         Output("chart-sinr",       "figure"),
-        Output("chart-energy",     "figure"),
         Output("sim-state",        "data",      allow_duplicate=True),
         Output("interval",         "disabled",  allow_duplicate=True),
         Output("error-alert",      "children",  allow_duplicate=True),
@@ -104,6 +124,10 @@ def register_callbacks(app: dash.Dash) -> None:
         global env
 
         if not state.get("running", False):
+            raise dash.exceptions.PreventUpdate
+        stop_at = state.get("_stop_at", -1)
+        if stop_at >= 0 and state.get("step", 0) >= stop_at:
+            state["running"] = False
             raise dash.exceptions.PreventUpdate
 
         algorithm  = state.get("algorithm", "baseline")
@@ -149,9 +173,11 @@ def register_callbacks(app: dash.Dash) -> None:
                 "ho_rate":    round(env.total_handovers / max(env.time_step, 1), 3),
                 "pp_rate":    round(env.ping_pong_count / max(env.total_handovers, 1), 3),
                 "avg_sinr":   round(_avg_sinr(env), 1),
-                "em_disc":    env.emergency_disconnections,
             }
             state["episode_reward"] = 0.0
+            state["running"]  = False
+            state["_paused"]  = False
+            state["_stop_at"] = -1
             env.reset()
 
         # Update history
@@ -159,7 +185,6 @@ def register_callbacks(app: dash.Dash) -> None:
         hist = state["history"]
         hist["handovers"].append(env.total_handovers)
         hist["sinr"].append(_avg_sinr(env))
-        hist["energy"].append(_energy_per_step(env, state["step"]))
 
         return _pack_outputs(env, state, False, alert_msg, alert_open)
 
@@ -196,11 +221,9 @@ def _pack_outputs(env, state, interval_disabled, alert_msg, alert_open):
         str(env.total_handovers),
         f"{_avg_sinr(env):.1f}",
         str(env.ping_pong_count),
-        str(env.emergency_disconnections),
         build_bs_load_bars(env),
         build_chart(hist["handovers"], "Handovers Over Time",      "#4F46E5"),
         build_chart(hist["sinr"],      "Avg SINR (dB) Over Time",  "#059669"),
-        build_chart(hist["energy"],    "Energy / Step",            "#E11D48"),
         state,
         interval_disabled,
         alert_msg,
@@ -234,7 +257,6 @@ def _build_comparison_panel(run_results: dict):
         _html.Span("HO / step",  style={**_H, "minWidth": "80px"}),
         _html.Span("Ping-Pong",  style={**_H, "minWidth": "80px"}),
         _html.Span("Avg SINR",   style={**_H, "minWidth": "80px"}),
-        _html.Span("Em. Disc.",  style={**_H, "minWidth": "70px"}),
     ], style={"display": "flex", "borderBottom": "2px solid #E2E8F0"})
 
     rows = [header]
@@ -253,7 +275,6 @@ def _build_comparison_panel(run_results: dict):
                                                         "color": "#EF4444" if r["pp_rate"] > 0 else "#10B981",
                                                         "fontWeight": "600"}),
             _html.Span(f"{r['avg_sinr']} dB",  style={**_S, "minWidth": "80px"}),
-            _html.Span(str(r["em_disc"]),       style={**_S, "minWidth": "70px"}),
         ], style={"display": "flex", "borderBottom": "1px solid #F1F5F9",
                   "alignItems": "center"}))
     return rows
